@@ -6,10 +6,46 @@
 
 - A statically typed programming language.
 - Ahead of time compilation to LLVM, at least initially.
+- DiamondFire is a planned future compilation target.
 - Runtime type information and an `Any`-like type are open questions.
 
 ## Decisions
 
+- Each requested build runs the designated compile-time build entry and its demanded compile-time calls; persistent caches do not suppress observable compile-time side effects. Explicitly cacheable computations may be added later. [Question 067, answer A with qualification](067_Comptime_execution_and_caching.md)
+
+- Compile-time code may access host facilities available to the compiler, perform observable I/O and other side effects, and let external events affect compilation. Compile-time computation is not required to be pure or reproducible. The host API, caching rules, and optional dependency tracking remain open. [Question 066, answer B with qualification](066_Comptime_external_inputs.md)
+
+- A designated compile-time entry function receives a compiler-provided build context and registers the runtime entry functions for the selected target, such as PC startup or DiamondFire event handlers. Registering a function does not execute it at compile time. The compile-time entry's name and registration API remain open. [Question 065, answer D with qualification](065_Program_entrypoints.md)
+
+- An ordinary flang operation has the same meaning wherever it is supported. A target or the compile-time evaluator may reject an unavailable operation with a compile-time error, and target-specific compile-time branches may select alternatives. DiamondFire also has native primitive families, provisionally including `DfString`, `DfVector`, and `DfNum`; their final names, semantics, and conversions remain open. [Question 064, answer B with qualification](064_Cross_target_semantics.md); [Question 036](036_DiamondFire_native_types.md)
+
+- Ordinary output uses an explicit capability passed from an entry point or embedding host to functions that need it. A debug-output operation, provisionally `debug_print`, is a narrow exception that can produce diagnostic output without an explicit output parameter in builds where it is enabled. Its name, destination, build setting, and argument rules remain open. [Question 062, answer B with qualification](062_External_capabilities.md); [Question 063, answer B with qualification](063_Debug_output_capability.md)
+
+- Recoverable failures use explicit result values such as `Result<T, E>`. I/O, mutation, and similar operations do not require a general effect annotation in every function type. Ordinary external output authority is passed explicitly from an entry point or embedding host, with a narrow debug-output exception. [Question 056, answer A with qualification](056_Effects_and_failure.md); [Question 062, answer B with qualification](062_External_capabilities.md)
+
+- Generic parameters in `<>` are compile-time parameters inferred from sufficient call context. `comp` parameters in `()` are compile-time-known arguments explicitly supplied by the caller. The exact spelling and fallback rules for parameters that cannot be inferred remain open. [Question 055, answer D with qualification](055_Generic_type_model.md)
+
+- A function may accept an argument that is either compile-time-known or runtime-known and select a compile-time branch during call specialization when it is compile-time-known. Direct calls with compile-time-known arguments are guaranteed to take that branch according to language-defined stage rules; runtime-known calls take the runtime branch. The exact syntax, indirect-call behavior, and branch-equivalence rules remain open. [Question 061, answer B with qualification](061_Optional_compile_time_specialization.md)
+
+- A function may use a compile-time-known argument to generate the type and trait requirements of its remaining runtime parameters through a compile-time signature block. Runtime arguments are checked against that generated signature. The exact syntax and reflection API remain open. [Question 060, answer D](060_Format_dependent_arguments.md)
+- Ordinary safe values use ownership and checked borrowing. An owned value ceases to exist when its owner leaves scope; its `Drop` behavior and required field destructors run then in a defined order. The compiler may choose when and how to reclaim or reuse backing storage without changing safe observable behavior. Optional regions or arenas may be added later. [Question 054, answer A with qualification](054_Memory_and_aliasing.md); [Question 059, answer B](059_Destruction_timing.md)
+
+- An `enum T` is a closed set of named, compile-time `T` values, where `T` is a separate type. A runtime enum value stores only an option identifier in the smallest unsigned integer type needed to distinguish the options. A `union` is a closed, tagged set of alternatives that may carry payloads. Both support exhaustive matching. Integer-like cases can use either construct, with `enum` as the idiomatic choice. Exact integer widths and union layout remain open. [Question 045, answer A](045_Enums_and_tagged_unions.md)
+- Distinct enum options may have equal associated compile-time values. Their option identifiers remain distinct, so an exhaustive match can distinguish them. Reverse lookup from an associated value remains open. [Question 046, answer A](046_Duplicate_enum_values.md)
+- An enum option known at compile time yields its associated value during compilation. A runtime-known enum value may yield its associated value when that value's type has a runtime representation; the compiler generates choice-dependent code. Access from a runtime-known option to a compile-time-only value is a compile-time error. Access spelling and lowering remain open. [Question 047, answer A](047_Enum_associated_value_access.md)
+- There is no built-in reverse lookup or automatic conversion from an associated `T` value to `enum T`. Programs may implement a search over the options. A possible standard-library trait for `enum<T>` when `T` implements `Equality` remains undecided. [Question 048, answer A with qualification](048_Enum_reverse_lookup.md)
+- Ordinary tagged unions may use compiler-chosen compact layouts, including encoding alternatives in otherwise invalid payload values. Programmers can explicitly request a stable memory layout; its syntax and exact layout algorithm remain open. [Question 049, answer B with qualification](049_Union_tag_representation.md)
+- An explicit stable-layout request for a tagged union guarantees a documented native layout across compatible compiler versions on the same target; layout may differ across targets. Nested payload types must also have suitable layout guarantees. C ABI compatibility and portable byte formats are separate questions. The request's syntax and layout algorithm remain open. [Question 050, answer A](050_Stable_union_layout_guarantee.md)
+- Constructing a tagged union value must explicitly name its alternative. A payload does not convert to a union value merely because its type currently matches one alternative. Construction spelling and whether constructors are function values remain open. [Question 051, answer A](051_Union_variant_construction.md)
+- Reading a tagged union payload requires a successful alternative pattern, such as a `match` arm or conditional pattern. Direct projection from a union value is invalid, even after a separate tag test. Pattern syntax and payload ownership remain open. [Question 052, answer A](052_Union_payload_access.md)
+- A payload-carrying union alternative's constructor is a function value that can be bound, passed, returned, or called. Obtaining the constructor names the alternative explicitly. Payload-free alternatives and constructor function representation remain open. [Question 053, answer A](053_Union_constructors_as_values.md)
+- Existing flang types will remain usable on the DiamondFire target. DiamondFire-native built-in types, provisionally including `DfString`, `DfVector`, and `DfNum`, will also be available where they can avoid some of the overhead of representing ordinary types. The final names, representations, and conversions remain open. [Question 036](036_DiamondFire_native_types.md); [Question 064, answer B with qualification](064_Cross_target_semantics.md)
+- Conversion between an already typed ordinary numeric value and a DiamondFire-native numeric value is explicit in both directions. [Question 036, answer A](036_DiamondFire_native_types.md)
+- Numeric literal spelling selects a type family: `42` stays integer and `42.0` stays floating. Context determines its concrete type within that family; without a determining context, the defaults are `i32` and `f64`, respectively. [Question 037, answer B](037_Numeric_literal_context.md)
+- A numeric literal that does not fit its context-selected type is a compile-time error. With no determining integer context, the literal defaults to `i32` even when its value is too large; the programmer must supply a suitable type. [Question 038, answer A](038_Numeric_literal_range.md)
+- Arithmetic whose numeric inputs are all known during compilation is evaluated exactly before its final result is checked against the context-selected type. This includes named, already typed compile-time constants; their binding initializers must still fit their declared types. [Question 039, answer C](039_Numeric_expression_context.md); [Question 040, answer B](040_Typed_constants_in_exact_arithmetic.md)
+- Runtime-dependent integer arithmetic uses concrete numeric types. Overflow is checked and fails in debug and release-safe builds. In fast builds without mandatory checks, ordinary overflow has no guaranteed behavior; intentional wrapping requires an explicit operation. [Question 040, answer B with qualification](040_Typed_constants_in_exact_arithmetic.md); [Question 041, answer B](041_Runtime_integer_overflow_modes.md)
+- A detected overflow in ordinary runtime integer arithmetic stops the current execution without language-level recovery. Programs can handle overflow through an explicit fallible arithmetic operation, such as a provisional `try_add`, returning `Result<T, OverflowError>`, where `OverflowError` is a distinct fieldless struct. [Question 042, answer A with qualification](042_Checked_overflow_failure.md); [Question 043, answer B](043_Fallible_arithmetic_result.md)
 - A named block may produce a value through an explicit `break` targeting its name. The spelling of labels and `break` remains provisional. [Question 002, answer C](002_Blocks_as_values.md)
 - `while` and `for` loops may produce a value through `break`; a loop's `else` expression supplies its value when the loop finishes normally. Label and `break` spelling remains provisional. [Question 003, answer A](003_Loop_values.md)
 - An unnamed `break` or `continue` targets the innermost loop. A `break` may carry a value there; exiting a named block or outer loop requires its name. [Question 004, answer A](004_Unnamed_breaks.md)
@@ -20,13 +56,24 @@
 - A function returns the value of its body block when that block completes normally. A non-unit return type requires a compatible body value. [Question 010, answer A](010_Function_body_results.md)
 - `return` exits the current function early. If a function contains a `return` targeting it, every path that completes that function must use `return`; a final expression alone is then insufficient. [Question 011, answer A with qualification](011_Early_function_exit.md)
 - A named function must declare a non-unit result type; omitting the result type means unit. [Question 012, answer A](012_Function_result_types.md)
-- Local `let` bindings are immutable by default; `let mut` permits both reassignment and mutation of data through that binding. Aliasing rules remain open. [Question 013, answer A with qualification](013_Local_binding_mutability.md)
+- Local `let` bindings are immutable by default; `let mut` permits both reassignment and mutation of data through that binding. Ordinary safe values use ownership and checked borrowing; detailed aliasing rules remain open. [Question 013, answer A with qualification](013_Local_binding_mutability.md); [Question 054, answer A with qualification](054_Memory_and_aliasing.md)
 - Compile-time computation is a rich part of the language, with planned binding forms `let`, `let mut`, `comp`, and `comp mut`. Function-local `comp mut` can change during compilation while nearby runtime operations remain in the generated function. Its state belongs to that compilation or specialization, not to each runtime call. File-scoped mutable compile-time state remains open. [Question 014, answer B](014_Comptime_mutable_scope.md)
 - Runtime-dependent control flow cannot update `comp mut` state. A compile-time `if` can update it when its condition is known during compilation. [Question 015, answer A](015_Runtime_control_of_comptime_state.md)
 - Parse both branches of a compile-time conditional, but resolve names and type-check only the selected branch. The inactive branch must be syntactically valid. [Question 018, answer A](018_Comptime_if_branch_checking.md)
 - A public module can select a separate implementation and re-export its public members under one stable namespace. The exact `import`/`load` and `reexport` spellings remain open. [Question 022, answer C](022_Conditional_module_files.md)
 - A source file is an importable unit exposing a struct-like namespace to permitted callers. A library developer may explicitly write a root file that imports and re-exports other files, including by scanning a directory; sibling files are not aggregated by default. Compiler cache and code-generation granularity remain open. [Question 023, answer E](023_Compilation_unit_size.md)
 - A root file can own a logical library scope. Implementation files may restrict direct imports to that library, while the root can re-export selected names to outside callers. The exact directives and individual-declaration visibility remain open. [Question 024, answer E](024_File_import_visibility.md)
+- Empty structs are supported. An imported file is a zero-sized struct with a static namespace for its top-level declarations. Possible runtime values of file types for dynamic dispatch remain open. [Question 026, answer A with qualification](026_File_as_zero_sized_struct.md)
+- A file can explicitly declare that it implements a trait. Platform implementation files and the selecting root file each declare conformance to their shared trait. [Question 025, answer E with qualification](025_Platform_interface_conformance.md)
+- Functions are values that can be bound directly. A root file can select a platform file at compile time and bind its function values as members of the root's trait implementation, without wrapper function bodies. [Question 027, answer E with qualification](027_Trait_scoped_reexport.md)
+- A compile-time `impl Trait` binding checks the selected concrete implementation and exposes only that trait's members through the binding. `impl TraitA + TraitB` requires both traits and exposes members from both; the selection is resolved at compile time. [Question 028, answer B with qualification](028_Comptime_impl_binding.md)
+- If composed traits expose the same member name, access through their combined view requires explicit trait qualification, even when signatures or implementations match. [Question 029, answer A](029_Composite_trait_member_collisions.md)
+- A trait implementation must explicitly bind a witness for every required non-default member inside its `impl` block, even when a matching top-level function already exists. Existing functions may be bound as witnesses. [Question 030, answer B](030_Trait_witness_binding.md)
+- Ordinary file member lookup finds an accessible trait witness when its name is unambiguous. The witness remains in its trait implementation and does not become a separate top-level declaration. Multiple traits contributing the same name require qualification. [Question 031, answer B](031_Trait_witness_lookup_on_files.md)
+- A top-level file member and a trait witness with the same name make ordinary member access ambiguous, even when both refer to the same function value; the caller must qualify the intended member. [Question 032, answer B](032_Inherent_vs_trait_member_lookup.md)
+- A parenthesized member-path segment qualifies the member's origin, such as `file.(Trait).name` for a trait witness and a corresponding top-level qualifier for an inherent member. The exact top-level qualifier spelling remains open. [Question 033, answer A with qualification](033_Member_origin_qualification.md)
+- Traits may require any importable declaration kind, including functions, constants, types, nested namespaces, compile-time functions, and future forms; required members need explicit witnesses in implementations. Matching rules for those kinds remain open. [Question 034, answer D](034_Trait_member_kinds.md)
+- A nested namespace bound as a trait witness must explicitly implement the required named trait; the enclosing implementation checks that declaration. [Question 035, answer A](035_Nested_namespace_trait_matching.md)
 
 ## Question index
 
@@ -54,5 +101,47 @@
 - [023: How large is an importable compilation unit?](023_Compilation_unit_size.md)
 - [024: Who may import a file, and can re-export broaden access?](024_File_import_visibility.md)
 - [025: How do platform implementations satisfy one public interface?](025_Platform_interface_conformance.md)
+- [026: Is an imported file a zero-sized struct?](026_File_as_zero_sized_struct.md)
+- [027: How does a root expose the selected file's trait functions?](027_Trait_scoped_reexport.md)
+- [028: What does a compile-time `impl Trait` binding mean?](028_Comptime_impl_binding.md)
+- [029: What happens when composed traits expose the same member name?](029_Composite_trait_member_collisions.md)
+- [030: How does an explicit trait implementation find its function witnesses?](030_Trait_witness_binding.md)
+- [031: Can a file's trait witnesses be called through its ordinary member path?](031_Trait_witness_lookup_on_files.md)
+- [032: What if a top-level file member and trait witness share a name?](032_Inherent_vs_trait_member_lookup.md)
+- [033: How is a file member or trait witness explicitly qualified?](033_Member_origin_qualification.md)
+- [034: What kinds of members may a trait require?](034_Trait_member_kinds.md)
+- [035: How does a trait check a nested namespace requirement?](035_Nested_namespace_trait_matching.md)
+- [036: How do DiamondFire-native types relate to ordinary types?](036_DiamondFire_native_types.md)
+- [037: Which numeric types can context give a literal?](037_Numeric_literal_context.md)
+- [038: What happens when a numeric literal does not fit its type?](038_Numeric_literal_range.md)
+- [039: How does a numeric expression get its type?](039_Numeric_expression_context.md)
+- [040: Do typed compile-time constants keep exact arithmetic?](040_Typed_constants_in_exact_arithmetic.md)
+- [041: What does runtime integer overflow do outside safe builds?](041_Runtime_integer_overflow_modes.md)
+- [042: What does checked integer overflow do when detected?](042_Checked_overflow_failure.md)
+- [043: What error type does fallible arithmetic return?](043_Fallible_arithmetic_result.md)
+- [044: How should errors propagate, and may error types be inferred?](044_Error_propagation_and_inference.md)
+- [045: Should enums be named compile-time value sets and unions be tagged alternatives?](045_Enums_and_tagged_unions.md)
+- [046: May distinct enum options have equal associated values?](046_Duplicate_enum_values.md)
+- [047: When can an enum yield its associated value?](047_Enum_associated_value_access.md)
+- [048: Should enums provide reverse lookup from associated values?](048_Enum_reverse_lookup.md)
+- [049: Must a union store a separate tag in memory?](049_Union_tag_representation.md)
+- [050: What does a stable union layout request guarantee?](050_Stable_union_layout_guarantee.md)
+- [051: Must union construction name its alternative?](051_Union_variant_construction.md)
+- [052: How does code access a union alternative's payload?](052_Union_payload_access.md)
+- [053: Is a union alternative's constructor a function value?](053_Union_constructors_as_values.md)
+- [054: Who owns runtime values, and what aliasing is allowed?](054_Memory_and_aliasing.md)
+- [055: How are generic functions and types expressed?](055_Generic_type_model.md)
+- [056: How are effects and recoverable failures represented?](056_Effects_and_failure.md)
+- [057: Can values hide their concrete types at runtime?](057_Runtime_type_information.md)
+- [058: What is the language's concurrency model?](058_Concurrency_model.md)
+- [059: When does destruction and physical deallocation occur?](059_Destruction_timing.md)
+- [060: Can a compile-time format determine runtime arguments?](060_Format_dependent_arguments.md)
+- [061: Should functions optionally specialize when an argument is compile-time-known?](061_Optional_compile_time_specialization.md)
+- [062: Where do external capabilities come from, and how do functions obtain them?](062_External_capabilities.md)
+- [063: Should debug output have a build-only ambient channel?](063_Debug_output_capability.md)
+- [064: What semantics are shared across compile-time, PC, and DiamondFire execution?](064_Cross_target_semantics.md)
+- [065: How does each execution setting enter flang code?](065_Program_entrypoints.md)
+- [066: What external inputs may compile-time code read?](066_Comptime_external_inputs.md)
+- [067: When may compile-time execution be skipped or cached?](067_Comptime_execution_and_caching.md)
 
 Decisions made in the question files will be reflected here as the language takes shape.
